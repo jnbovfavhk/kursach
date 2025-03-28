@@ -65,6 +65,7 @@ def prepare_data(images, annotations, batch_size=10):
         for img_path, annotation in zip(batch_images, batch_annotations):
             print(img_path + " готово")
             image = cv2.imread(img_path)
+
             if image is None:
                 print(f"Ошибка загрузки изображения: {img_path}. Пропускаем это изображение.")
                 continue  # Пропускаем это изображение, если оно не загружено
