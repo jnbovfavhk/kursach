@@ -113,22 +113,33 @@ def train_svm(X, y):
 
 
 # Метод скользящего окна
-def sliding_window(image, step_size=8, window_size=(64, 64)):
-    for y in range(0, image.shape[0] - window_size[1], step_size):
-        for x in range(0, image.shape[1] - window_size[0], step_size):
-            yield (x, y, image[y:y + window_size[1], x:x + window_size[0]])
+def sliding_window(image, step_size=8, min_window_size=(64, 64), max_window_size=None, aspect_ratio=(1, 2)):
+    if max_window_size is None:
+        max_window_size = (image.shape[1], image.shape[0])  # Установить максимальный размер окна равным размеру изображения
+
+    for window_height in range(min_window_size[1], max_window_size[1] + 1, 16):  # Увеличиваем высоту окна
+        for window_width in range(min_window_size[0], max_window_size[0] + 1, 16):  # Увеличиваем ширину окна
+
+            # Находим соотношение сторон
+            width_to_height_ratio = window_width / window_height
+            height_to_width_ratio = window_height / window_width
+
+            # Проверяем, что хотя бы одно из соотношений в заданном интервале(где может находится лицо)
+            if (aspect_ratio[0] <= width_to_height_ratio <= aspect_ratio[1]) or \
+                    (aspect_ratio[0] <= height_to_width_ratio <= aspect_ratio[1]):
+                for y in range(0, image.shape[0] - window_height + 1, step_size):
+                    for x in range(0, image.shape[1] - window_width + 1, step_size):
+                        yield (x, y, image[y:y + window_height, x:x + window_width])
 
 
 # Обнаружение лиц с помощью скользящего окна
 def detect_faces(image, model):
     detections = []
     for (x, y, window) in sliding_window(image):
-        if window.shape[0] != 64 or window.shape[1] != 64:
-            continue
         features = extract_hog_features(window)
         prediction = model.predict([features])
         if prediction == 1:  # Если предсказано, что это лицо
-            detections.append((x, y, x + 64, y + 64))  # Записываем координаты окна
+            detections.append((x, y, x + window.shape[1], y + window.shape[0]))  # Записываем координаты окна
 
     return detections
 
