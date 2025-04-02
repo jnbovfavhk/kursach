@@ -19,8 +19,10 @@ def prepare_data(images, annotations):
     X = []
     y = []
 
+    i = 0
     for img_path, annotation in zip(images, annotations):
-        print(img_path + " готово")
+        i += 1
+        print(img_path + " готово(" + str(i) + ")")
         image = cv2.imread(img_path)
         if image is None:
             print(f"Ошибка загрузки изображения: {img_path}. Пропускаем это изображение.")
@@ -29,7 +31,7 @@ def prepare_data(images, annotations):
         height, width = image.shape[:2]
         # Применение аннотаций YOLO
         for box in annotation:
-            x1, y1, x2, y2 = box  # Координаты из YOLO
+            x1, y1, x2, y2 = box  # Координаты прямоугольника
 
             face = image[y1:y2, x1:x2]
             if face.size > 0:
@@ -37,11 +39,17 @@ def prepare_data(images, annotations):
                 X.append(features)
                 y.append(1)  # Лицо
 
-        # Генерация негативных примеров (например, случайные окна)
+        # Генерация негативных примеров
         for _ in range(100):  # Количество негативных примеров
-            x1 = np.random.randint(0, width - 64)
-            y1 = np.random.randint(0, height - 64)
-            not_face = image[y1:y1 + 64, x1:x1 + 64]
+            # Случайный размер окна
+            window_width = np.random.randint(32, 128)  # Измените диапазон по необходимости
+            window_height = np.random.randint(32, 128)
+
+            # Случайные координаты
+            x1 = np.random.randint(0, width - window_width)
+            y1 = np.random.randint(0, height - window_height)
+
+            not_face = image[y1:y1 + window_height, x1:x1 + window_width]
             if not_face.size > 0:
                 features = extract_hog_features(not_face).astype(np.float32)
                 X.append(features)
@@ -49,99 +57,42 @@ def prepare_data(images, annotations):
 
     return np.array(X), np.array(y)
 
-# def prepare_data(images, annotations, batch_size=10):
-#     X_batches = []
-#     y_batches = []
-#
-#     for i in range(0, len(images), batch_size):
-#         batch_images = images[i:i + batch_size]
-#         batch_annotations = annotations[i:i + batch_size]
-#
-#         # Временные списки для хранения данных текущего батча
-#         X_batch = []
-#         y_batch = []
-#
-#         for img_path, annotation in zip(batch_images, batch_annotations):
-#             print(img_path + " готово")
-#             image = cv2.imread(img_path)
-#
-#             if image is None:
-#                 print(f"Ошибка загрузки изображения: {img_path}. Пропускаем это изображение.")
-#                 continue  # Пропускаем это изображение, если оно не загружено
-#
-#             height, width = image.shape[:2]
-#
-#             if width < 64 or height < 64:
-#                 print(f"Изображение слишком маленькое: {img_path}. Пропускаем.")
-#                 continue  # Пропускаем изображение, если оно слишком маленькое
-#
-#             if not annotation:
-#                 print(f"Нет аннотаций для изображения: {img_path}. Пропускаем.")
-#                 continue  # Пропускаем изображение, если нет аннотаций
-#
-#             # Применение аннотаций YOLO
-#             for box in annotation:
-#                 x_center, y_center, w, h = box  # Координаты из YOLO
-#                 x1 = int((x_center - w / 2) * width)
-#                 y1 = int((y_center - h / 2) * height)
-#                 x2 = int((x_center + w / 2) * width)
-#                 y2 = int((y_center + h / 2) * height)
-#                 face = image[y1:y2, x1:x2]
-#
-#                 if face.size > 0:
-#                     features = extract_hog_features(face)
-#                     X_batch.append(features)
-#                     y_batch.append(1)  # Лицо
-#
-#             # Генерация негативных примеров (например, случайные окна)
-#             for _ in range(100):  # Количество негативных примеров
-#                 x1 = np.random.randint(0, width - 64)
-#                 y1 = np.random.randint(0, height - 64)
-#                 not_face = image[y1:y1 + 64, x1:x1 + 64]
-#                 if not_face.size > 0:
-#                     features = extract_hog_features(not_face)
-#                     X_batch.append(features)
-#                     y_batch.append(0)  # Не лицо
-#
-#                 # Добавляем текущий батч в общий список батчей
-#             if len(X_batch) > 0 and len(y_batch) > 0:
-#                 X_batches.append(np.array(X_batch))
-#                 y_batches.append(np.array(y_batch))
-#                 print(f"Обработано {len(X_batch)} примеров в батче.")
-#
-#             # Объединяем все батчи в один массив
-#             X = np.concatenate(X_batches) if X_batches else np.array([])
-#             y = np.concatenate(y_batches) if y_batches else np.array([])
-#
-#             return X, y
-
 
 # Обучение модели SVM
 def train_svm(X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
-    model = svm.SVC(kernel='linear')
+    model = svm.SVC(kernel='rbf')
     model.fit(X_train, y_train)
 
     return model
 
 
-# Метод скользящего окна
-def sliding_window(image, step_size=8, min_window_size=(64, 64), max_window_size=None, aspect_ratio=(1, 2)):
-    if max_window_size is None:
-        max_window_size = (image.shape[1], image.shape[0])  # Установить максимальный размер окна равным размеру изображения
 
-    for window_height in range(min_window_size[1], max_window_size[1] + 1, 16):  # Увеличиваем высоту окна
-        for window_width in range(min_window_size[0], max_window_size[0] + 1, 16):  # Увеличиваем ширину окна
+# Метод скользящего окна
+def sliding_window(image, step_size=None, min_window_size=None, max_window_size=None, aspect_ratio=(1, 2)):
+    if max_window_size is None:
+        max_window_size = (image.shape[1], image.shape[0]) # Установить максимальный размер окна равным размеру изображения
+
+    if min_window_size is None:
+        min_window_size = (image.shape[1] // 20, image.shape[0] // 20)
+
+    if step_size is None:
+        step_size = min_window_size[0]
+
+    for window_height in range(min_window_size[1], max_window_size[1] + 1, max_window_size[1] // 20):  # Увеличиваем высоту окна
+        for window_width in range(min_window_size[0], max_window_size[0] + 1, max_window_size[0] // 20):  # Увеличиваем ширину окна
 
             # Находим соотношение сторон
             width_to_height_ratio = window_width / window_height
             height_to_width_ratio = window_height / window_width
 
+            step_size = window_width
             # Проверяем, что хотя бы одно из соотношений в заданном интервале(где может находится лицо)
             if (aspect_ratio[0] <= width_to_height_ratio <= aspect_ratio[1]) or \
                     (aspect_ratio[0] <= height_to_width_ratio <= aspect_ratio[1]):
                 for y in range(0, image.shape[0] - window_height + 1, step_size):
                     for x in range(0, image.shape[1] - window_width + 1, step_size):
+                        print(f'x = {x}, y = {y}, width = {window_width}, height = {window_height}')
                         yield (x, y, image[y:y + window_height, x:x + window_width])
 
 
@@ -206,9 +157,9 @@ def load_yolo_annotations(images_dir, annotations_dir):
 
     return image_files, annotations
 
-def get_trained_model():
+def get_trained_model(images_path, labels_path):
     # Загрузка изображений и аннотаций
-    images, annotations = load_yolo_annotations("C:\\Users\\ilyab\\Downloads\\wider_face\\images", "C:\\Users\\ilyab\\Downloads\\wider_face\\labels")
+    images, annotations = load_yolo_annotations(images_path, labels_path)
 
     # Подготовка данных
     X, y = prepare_data(images, annotations)
