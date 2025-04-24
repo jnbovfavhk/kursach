@@ -5,14 +5,19 @@ import numpy as np
 from skimage.feature import hog
 from sklearn import svm
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader
+
 from GeneralMethods import load_yolo_annotations
 from GeneralMethods import draw_detections
 from GeneralMethods import sliding_window
+from GeneralMethods import FaceDataset
 
 
 # Функция для извлечения признаков HOG
 def extract_hog_features(image):
-    image = cv2.resize(image, (64, 128))
+    if image is None or image.size == 0:
+        return np.zeros(8100)
+    image = cv2.resize(image, (128, 128))
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     features = hog(gray_image, pixels_per_cell=(8, 8), cells_per_block=(2, 2), visualize=False)
     return features
@@ -23,41 +28,19 @@ def prepare_data(images, annotations):
     X = []
     y = []
 
+
+    dataset = FaceDataset(images, annotations, extract_hog_features)
+    dataloader = DataLoader(dataset, batch_size=1, num_workers=5, drop_last=True)
     i = 0
-    for img_path, annotation in zip(images, annotations):
+    for features, labels in dataloader:
         i += 1
-        print(img_path + " готово(" + str(i) + ")")
-        image = cv2.imread(img_path)
-        if image is None:
-            print(f"Ошибка загрузки изображения: {img_path}. Пропускаем это изображение.")
-            continue  # Пропускаем это изображение, если оно не загружено
+        # Превращаем данные из тензоров в списки и числа
+        features1 = features.flatten().tolist()
+        labels1 = labels.item()
+        X.append(features1)
+        y.append(labels1)
 
-        height, width = image.shape[:2]
-        # Применение аннотаций YOLO
-        for box in annotation:
-            x1, y1, x2, y2 = box  # Координаты прямоугольника
-
-            face = image[y1:y2, x1:x2]
-            if face.size > 0:
-                features = extract_hog_features(face).astype(np.float32)
-                X.append(features)
-                y.append(1)  # Лицо
-
-        # Генерация негативных примеров
-        for _ in range(100):  # Количество негативных примеров
-            # Случайный размер окна
-            window_width = np.random.randint(32, 128)  # Измените диапазон по необходимости
-            window_height = np.random.randint(32, 128)
-
-            # Случайные координаты
-            x1 = np.random.randint(0, width - window_width)
-            y1 = np.random.randint(0, height - window_height)
-
-            not_face = image[y1:y1 + window_height, x1:x1 + window_width]
-            if not_face.size > 0:
-                features = extract_hog_features(not_face).astype(np.float32)
-                X.append(features)
-                y.append(0)  # Не лицо
+        print("Готово " + str(i))
 
     return np.array(X), np.array(y)
 
@@ -65,7 +48,7 @@ def prepare_data(images, annotations):
 # Обучение модели SVM
 def train_svm(X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
-    model = svm.SVC(kernel='rbf')
+    model = svm.SVC(kernel='rbf', gamma='scale')
     model.fit(X_train, y_train)
 
     return model
