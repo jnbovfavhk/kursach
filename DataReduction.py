@@ -16,7 +16,6 @@ def reduct_images_dataset(images_path, annotations_path, new_size):
 
 
     image_files = [f for f in os.listdir(images_path)]
-    annotation_files = [f for f in os.listdir(annotations_path)]
 
 
     selected_images = random.sample(image_files, min(new_size, len(image_files)))

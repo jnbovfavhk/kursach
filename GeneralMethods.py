@@ -150,7 +150,6 @@ class FaceDataset(Dataset):
         return features, label
 
 
-
         # image = cv2.imread(img_path)
         # if image is None:
         #     raise ValueError(f"Ошибка загрузки изображения: {img_path}")

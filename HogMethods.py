@@ -68,7 +68,6 @@ def detect_faces(image, model):
 
 
 
-
 def get_trained_model(images_path, labels_path):
     # Загрузка изображений и аннотаций
     images, annotations = load_yolo_annotations(images_path, labels_path)
