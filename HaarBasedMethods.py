@@ -37,9 +37,12 @@ def prepare_data(images, annotations):
 
 
     dataset = FaceDataset(images, annotations, extract_haar_features)
-    dataloader = DataLoader(dataset, batch_size=1, num_workers=5, drop_last=True)
+
+    dataloader = DataLoader(dataset, batch_size=1, num_workers=3, drop_last=True)
+
     i = 0
     for features, labels in dataloader:
+
         i += 1
         # Превращаем данные из тензоров в списки и числа
         features1 = features.flatten().tolist()
@@ -119,7 +122,6 @@ def detect_faces(image, model):
 def get_trained_model(images_path, labels_path):
     # Загрузка изображений и аннотаций
     images, annotations = load_yolo_annotations(images_path, labels_path)
-
 
     # Подготовка данных
     X, y = prepare_data(images, annotations)

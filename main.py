@@ -7,7 +7,7 @@ import DataReduction
 
 def demonstrate_haar():
     images_path, labels_path = DataReduction.reduct_images_dataset("wider_face/images",
-                                                                   "wider_face/labels", 100)
+                                                                   "wider_face/labels", 10)
 
     if not os.path.isfile('haar_trained.pkl'):
         model = HaarBasedMethods.get_trained_model(images_path, labels_path)
@@ -24,7 +24,7 @@ def demonstrate_haar():
 def demonstrate_hog():
     images_path, labels_path = DataReduction.reduct_images_dataset(
         "wider_face/images",
-        "wider_face/labels", 100)
+        "wider_face/labels", 10)
 
     if not os.path.isfile('hog_trained.pkl'):
         model = HogMethods.get_trained_model(images_path, labels_path)

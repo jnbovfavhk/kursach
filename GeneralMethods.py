@@ -134,6 +134,8 @@ class FaceDataset(Dataset):
                 if nf_box is not None:
                     self.data.append((img_path, nf_box, 0))
 
+        print("FaceDataset инициализирован. длина массива данных: " + str(len(self.data)))
+
 
     def __len__(self):
         return len(self.data)
@@ -145,6 +147,7 @@ class FaceDataset(Dataset):
             raise RuntimeError(f"Не удалось загрузить изображение {img_path}")
         x1, y1, x2, y2 = box
         roi = img[y1:y2, x1:x2]
+        print("getitem сработал. Индекс: " + str(idx))
         features = self.extract_features_func(roi)
         # Возвращаем тензор и метку
         return features, label
