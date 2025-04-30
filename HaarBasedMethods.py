@@ -38,7 +38,7 @@ def prepare_data(images, annotations):
 
     dataset = FaceDataset(images, annotations, extract_haar_features)
 
-    dataloader = DataLoader(dataset, batch_size=1, num_workers=3, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=1, num_workers=3, drop_last=False)
 
     i = 0
     for features, labels in dataloader:

@@ -149,6 +149,7 @@ class FaceDataset(Dataset):
         roi = img[y1:y2, x1:x2]
         print("getitem сработал. Индекс: " + str(idx))
         features = self.extract_features_func(roi)
+        print(f"Для индекса {idx} извлеклись признаки")
         # Возвращаем тензор и метку
         return features, label
 
