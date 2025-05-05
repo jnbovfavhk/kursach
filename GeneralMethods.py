@@ -1,10 +1,11 @@
 import os
 
 import cv2
+from PIL import Image
 from torch.utils.data import Dataset
 import numpy as np
 from skimage.feature import haar_like_feature
-import torch
+
 
 
 
@@ -26,7 +27,7 @@ def load_yolo_annotations(images_dir, annotations_dir):
         print(i)
 
         # Получение размера изображения
-        image = cv2.imread(image_file)
+        image = np.array(Image.open(image_file))
 
         height, width = image.shape[:2]
 
@@ -123,7 +124,7 @@ class FaceDataset(Dataset):
             for box in face_boxes:
                 self.data.append((img_path, box, 1))
             # И для каждого лица — не-лицевой пример того же размера с label=0
-            img = cv2.imread(img_path)
+            img = np.array(Image.open(img_path))
             if img is None:
                 continue
             h, w = img.shape[:2]
@@ -141,41 +142,42 @@ class FaceDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
+
         img_path, box, label = self.data[idx]
-        img = cv2.imread(img_path)
+        img = np.array(Image.open(img_path))
+        if img.size == 0:
+            raise ValueError(f"Пустое изображение: {img_path}")
+
+        x1, y1, x2, y2 = box
+        if x2 <= x1 or y2 <= y1:
+            raise ValueError(f"Некорректный bounding box: {box}")
+
+        roi = img[y1:y2, x1:x2]
+        if roi.size == 0:
+            raise ValueError(f"Пустой ROI для box {box}")
+
         if img is None:
             raise RuntimeError(f"Не удалось загрузить изображение {img_path}")
-        x1, y1, x2, y2 = box
-        roi = img[y1:y2, x1:x2]
         print("getitem сработал. Индекс: " + str(idx))
         features = self.extract_features_func(roi)
         print(f"Для индекса {idx} извлеклись признаки")
         # Возвращаем тензор и метку
         return features, label
 
+    def get_batch(self, indices):
+        batch_images = []
+        batch_labels = []
+        for idx in indices:
+            img_path, box, label = self.data[idx]
+            img = np.array(Image.open(img_path))
+            roi = img[box[1]:box[3], box[0]:box[2]]
+            batch_images.append(roi)
+            batch_labels.append(label)
 
-        # image = cv2.imread(img_path)
-        # if image is None:
-        #     raise ValueError(f"Ошибка загрузки изображения: {img_path}")
-        #
-        #
-        #
-        #
-        #
-        #
-        # x1, y1, x2, y2 = box  # Координаты прямоугольника
-        # face = image[y1:y2, x1:x2]
-        #
-        # face_features = extract_haar_features(face).astype(np.float32)
-        # features = face_features
-        # if idx < len(self.images) / 2:
-        #     label = 1
-        # else:
-        #     label = 0
-        #
-        #
-        #
-        # print(img_path + " готово(" + str(idx) + ")")
-        # return np.array(features), np.array(label)
+
+        # Векторизованная обработка
+        features_batch = self.extract_features_func(batch_images)
+        print(f"Для {len(indices)} индексов извлеклись признаки")
+        return features_batch, batch_labels
 
 
