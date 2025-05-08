@@ -84,12 +84,13 @@ def prepare_data(images, annotations, batch_size=32):
 
     i = 0
     with ThreadPoolExecutor(max_workers=5) as executor:
-        print("Готово - " + str(i))
-
         results = executor.map(dataset.get_batch, batches)
+
         for features_batch, label_batch in results:
+            i += 1
             X.extend(features_batch)
             y.extend(label_batch)
+            print("Готово - " + str(i))
 
     return np.array(X), np.array(y)
 

@@ -1,5 +1,6 @@
 import torch
 
+import CNNMethods
 import HaarBasedMethods
 import HogMethods
 import joblib
@@ -11,7 +12,7 @@ import SiftMethods
 def demonstrate_haar():
 
     images_path, labels_path = DataReduction.reduct_images_dataset("wider_face/images",
-                                                                   "wider_face/labels", 100)
+                                                                   "wider_face/labels", 1000)
 
     if not os.path.isfile('haar_trained.pkl'):
         model = HaarBasedMethods.get_trained_model(images_path, labels_path)
@@ -22,13 +23,13 @@ def demonstrate_haar():
         print("Модель десериализована")
 
     HaarBasedMethods.detect_and_draw("wider_face/images/wider_2236.jpg",
-                               model, "ProcessedImages/testImageHaarAt100TrainImages.jpg")
+                               model, "ProcessedImages/testImageHaarAt1000TrainImages.jpg")
     print("Обнаружены лица на тестовом изображении")
 
 def demonstrate_hog():
     images_path, labels_path = DataReduction.reduct_images_dataset(
         "wider_face/images",
-        "wider_face/labels", 100)
+        "wider_face/labels", 1000)
 
     if not os.path.isfile('hog_trained.pkl'):
         model = HogMethods.get_trained_model(images_path, labels_path)
@@ -39,13 +40,13 @@ def demonstrate_hog():
         print("Модель Hog десериализована")
 
     HogMethods.detect_and_draw("wider_face/images/wider_2236.jpg",
-                               model, "ProcessedImages/testImageHogAt100TrainImages.jpg")
+                               model, "ProcessedImages/testImageHogAt1000TrainImages.jpg")
     print("Обнаружены лица на тестовом изображении")
 
 def demonstrate_sift():
     images_path, labels_path = DataReduction.reduct_images_dataset(
         "wider_face/images",
-        "wider_face/labels", 100)
+        "wider_face/labels", 1000)
 
 
     if not os.path.isfile('sift_trained.pkl'):
@@ -57,10 +58,24 @@ def demonstrate_sift():
         model = model.load_model("sift_trained.pkl")
         print("Модель Sift десериализована")
 
-    model.detect_and_draw("wider_face/images/wider_2236.jpg", "ProcessedImages/testImageSIFTAt100TrainImages.jpg")
+    model.detect_and_draw("wider_face/images/wider_2236.jpg", "ProcessedImages/testImageSIFTAt1000TrainImages.jpg")
     print("Обнаружены лица на тестовом изображении")
 
+def demonstrate_cnn():
+    images_path, labels_path = DataReduction.reduct_images_dataset(
+        "wider_face/images",
+        "wider_face/labels", 1000)
+    if not os.path.isfile('cnn_trained.pt'):
+        model = CNNMethods.get_trained_model(images_path, labels_path)
+        CNNMethods.save_model(model, 'cnn_trained.pt')
+    else:
+        model = CNNMethods.load_model('cnn_trained.pt')
+    CNNMethods.detect_and_draw(model, "wider_face/images/wider_2236.jpg", "ProcessedImages/testImageCNNAt100TrainImages.jpg")
+
+
 if __name__ == '__main__':
-    demonstrate_hog()
+    # demonstrate_hog()
+
     # demonstrate_haar()
     demonstrate_sift()
+    # demonstrate_cnn()

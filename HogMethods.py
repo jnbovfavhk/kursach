@@ -7,7 +7,7 @@ from skimage.feature import hog
 from sklearn import svm
 from sklearn.model_selection import train_test_split
 
-from GeneralMethods import load_yolo_annotations
+from GeneralMethods import load_yolo_annotations, nms_without_scores
 from GeneralMethods import draw_detections
 from GeneralMethods import sliding_window
 from GeneralMethods import FaceDataset
@@ -42,10 +42,10 @@ def prepare_data(images, annotations, batch_size=32):
 
     dataset = FaceDataset(images, annotations, extract_hog_features)
 
-    # batches = [indices[i:i + batch_size] for i in range(0, len(indices), batch_size)]
+
     def process_item(idx):
         features, label = dataset[idx]
-        print(features)
+
         return features, label
 
     i = 0
@@ -101,6 +101,7 @@ def detect_and_draw(path, model, path_to_save):
     test_image = cv2.imread(path)
     detections = detect_faces(test_image, model)
     print(detections)
+
     # Отрисовка обнаруженных лиц
     output_image = draw_detections(test_image, detections)
     cv2.imwrite(path_to_save, output_image)

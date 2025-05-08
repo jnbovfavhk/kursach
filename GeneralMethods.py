@@ -122,17 +122,22 @@ class FaceDataset(Dataset):
         for img_path, face_boxes in zip(image_paths, face_boxes_list):
             # Для каждого лица создаём пару: (img_path, box, label=1)
             for box in face_boxes:
-                self.data.append((img_path, box, 1))
+                x1, y1, x2, y2 = box
+                if x2 > x1 and y2 > y1:  # Проверка корректности
+                    self.data.append((img_path, box, 1))
+
             # И для каждого лица — не-лицевой пример того же размера с label=0
             img = np.array(Image.open(img_path))
+
             if img is None:
                 continue
             h, w = img.shape[:2]
+
             for box in face_boxes:
                 box_w = box[2] - box[0]
                 box_h = box[3] - box[1]
                 nf_box = generate_random_box(w, h, box_w, box_h, face_boxes)
-                if nf_box is not None:
+                if nf_box and (nf_box[2] > nf_box[0]) and (nf_box[3] > nf_box[1]):
                     self.data.append((img_path, nf_box, 0))
 
         print("FaceDataset инициализирован. длина массива данных: " + str(len(self.data)))
@@ -160,7 +165,7 @@ class FaceDataset(Dataset):
             raise RuntimeError(f"Не удалось загрузить изображение {img_path}")
         print("getitem сработал. Индекс: " + str(idx))
         features = self.extract_features_func(roi)
-        print(f"Для индекса {idx} извлеклись признаки")
+
         # Возвращаем тензор и метку
         return features, label
 
@@ -181,3 +186,29 @@ class FaceDataset(Dataset):
         return features_batch, batch_labels
 
 
+def nms_without_scores(boxes, iou_threshold=0.1):
+    if len(boxes) == 0:
+        return []
+
+    # Конвертируем в numpy для удобства
+    boxes = np.array(boxes)
+
+    selected_boxes = []
+
+    while len(boxes) > 0:
+        # Берем первый бокс (можно заменить на выбор по другому критерию)
+        current_box = boxes[0]
+        selected_boxes.append(current_box.tolist())
+
+        # Удаляем его из списка
+        remaining_boxes = []
+
+        # Считаем IoU текущего бокса с остальными
+        for box in boxes[1:]:
+            box_iou = iou(current_box, box)
+            if box_iou < iou_threshold:
+                remaining_boxes.append(box)
+
+        boxes = np.array(remaining_boxes)
+
+    return selected_boxes

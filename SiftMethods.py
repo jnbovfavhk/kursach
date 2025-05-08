@@ -2,7 +2,7 @@ import os
 
 import cv2
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.cluster import MiniBatchKMeans
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -10,11 +10,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import joblib
 
-from GeneralMethods import load_yolo_annotations, sliding_window, draw_detections
+from GeneralMethods import load_yolo_annotations, sliding_window, draw_detections, iou
 
 
 class FaceDetector:
-    def __init__(self, n_clusters=1000, svm_kernel='linear'):
+    def __init__(self, n_clusters=80, svm_kernel='rbf'):
         """
         Инициализация детектора лиц.
 
@@ -72,7 +72,7 @@ class FaceDetector:
             # Негативные примеры (фон)
             for _ in range(len(rects)):
                 while True:
-                    w, h = np.random.randint(50, 150, 2)
+                    w, h = np.random.randint(50, 200, 2)
                     x = np.random.randint(0, width - w)
                     y = np.random.randint(0, height - h)
 
@@ -107,7 +107,7 @@ class FaceDetector:
 
         # 2. Обучение K-means
         print("Обучение K-means...")
-        self.kmeans = KMeans(n_clusters=self.n_clusters, n_init=10)
+        self.kmeans = MiniBatchKMeans(n_clusters=self.n_clusters, batch_size=512, n_init=10)
         self.kmeans.fit(all_descriptors)
 
         # 3. Создание BoVW-векторов
@@ -127,6 +127,8 @@ class FaceDetector:
         print("Обучение SVM...")
         self.svm = SVC(kernel=self.svm_kernel,
                        class_weight='balanced',
+                       gamma=1,
+                       C=1,
                        probability=True)
 
         # Создание pipeline с нормализацией
@@ -148,7 +150,8 @@ class FaceDetector:
 
         return self
 
-    def predict_image(self, image_path, threshold=0.8):
+    # Возвращает true, если лицо есть на изображении и уверенность модели
+    def predict_image(self, img, threshold=0.8):
         """
         Предсказание для одного изображения.
 
@@ -160,7 +163,7 @@ class FaceDetector:
             True/False - есть ли лицо на изображении
             confidence - уверенность модели
         """
-        img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
         if img is None:
             return False, 0.0
 
@@ -192,8 +195,11 @@ class FaceDetector:
         detector.pipeline = data['pipeline']
         return detector
 
+
+    # Применяет Non-Maximum Suppression к списку прямоугольников
     def _apply_nms(self, rectangles, min_neighbors):
-        """Применяет Non-Maximum Suppression к списку прямоугольников"""
+
+
         if len(rectangles) == 0:
             return []
 
@@ -219,36 +225,19 @@ class FaceDetector:
                 x1_i, y1_i, x2_i, y2_i = current[:4]
                 x1_j, y1_j, x2_j, y2_j = rectangles[j][:4]
 
-                xi1 = max(x1_i, x1_j)
-                yi1 = max(y1_i, y1_j)
-                xi2 = min(x2_i, x2_j)
-                yi2 = min(y2_i, y2_j)
+                box_iou = iou([x1_i, y1_i, x2_i, y2_i], [x1_j, y1_j, x2_j, y2_j])
 
-                inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)
-                iou = inter_area / ((x2_i - x1_i) * (y2_i - y1_i) + (x2_j - x1_j) * (y2_j - y1_j) - inter_area)
-
-                if iou > 0.3:  # Порог перекрытия
+                if box_iou > 0.3:  # Порог перекрытия
                     neighbors += 1
                     if neighbors >= min_neighbors:
                         suppressed[j] = True
 
         return final_rectangles
 
-    def detect_faces(self, image_path, threshold = 0.8, min_neighbors = 1):
-        """
-        Обнаружение лиц на изображении с помощью вашего sliding_window
 
-        Параметры:
-            image_path: путь к изображению
-            threshold: порог вероятности для классификации как лицо
-            min_neighbors: минимальное количество соседей для NMS
-            min_window_size: минимальный размер окна
-            max_window_size: максимальный размер окна
-            aspect_ratio: допустимое соотношение сторон (min, max)
+    # Возвращает cписок прямоугольников лиц в формате (x1, y1, x2, y2)
+    def detect_faces(self, image_path, min_neighbors = 8):
 
-        Возвращает:
-            Список прямоугольников лиц в формате (x1, y1, x2, y2)
-        """
         img = cv2.imread(image_path)
         if img is None:
             return []
@@ -256,71 +245,42 @@ class FaceDetector:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         rectangles = []
 
-        # Используем ваш sliding_window
+
         for (x, y, window) in sliding_window(gray):
-            desc = self._extract_sift_descriptors(window)
-            if len(desc) == 0:
+            window_is_face, confidence = self.predict_image(window)
+            if window_is_face == 0:
                 continue
 
+            desc = self._extract_sift_descriptors(window)
+            # Преобразуем в одномерный вектор фиксированной длины
             bovw = self._create_bovw_vector(desc).reshape(1, -1)
-            proba = self.pipeline.predict_proba(bovw)[0][1]
 
-            if proba >= threshold:
-                win_h, win_w = window.shape[:2]
-                rectangles.append((x, y, x + win_w, y + win_h, proba))
+
+            win_h, win_w = window.shape[:2]
+            rectangles.append((x, y, x + win_w, y + win_h, confidence))
 
         # Применяем Non-Maximum Suppression
         return self._apply_nms(rectangles, min_neighbors)
 
-    def detect_and_draw(self, img_path, path_to_save, threshold = 0.7, min_neighbors = 1):
-        """
-        Обнаруживает лица на изображении, рисует прямоугольники и сохраняет результат
-        Возвращает:
-            bool: True если обнаружение и сохранение прошло успешно, False в противном случае
-        """
-        try:
-            # 1. Загрузка изображения
-            img = cv2.imread(img_path)
-            if img is None:
-                print(f"Ошибка: не удалось загрузить изображение {img_path}")
-                return False
+    def detect_and_draw(self, img_path, path_to_save):
 
-            # 2. Обнаружение лиц
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            rectangles = []
+        detections = self.detect_faces(img_path)
 
-            for (x, y, window) in sliding_window(gray):
-                desc = self._extract_sift_descriptors(window)
-                if len(desc) == 0:
-                    continue
+        img = cv2.imread(img_path)
+        result_img = draw_detections(img, detections)
 
-                bovw = self._create_bovw_vector(desc).reshape(1, -1)
-                proba = self.pipeline.predict_proba(bovw)[0][1]
+        # Создаем директорию, если ее нет
+        os.makedirs(os.path.dirname(path_to_save), exist_ok=True)
 
-                if proba >= threshold:
-                    win_h, win_w = window.shape[:2]
-                    rectangles.append((x, y, x + win_w, y + win_h, proba))
-
-            # 3. Применяем Non-Maximum Suppression
-            final_detections = self._apply_nms(rectangles, min_neighbors)
-
-            # 4. Рисуем прямоугольники и сохраняем
-            result_img = draw_detections(img, final_detections)
-
-            # Создаем директорию, если ее нет
-            os.makedirs(os.path.dirname(path_to_save) or os.path.dirname(path_to_save), exist_ok=True)
-
-            # 5. Сохраняем результат
-            if not cv2.imwrite(path_to_save, result_img):
-                print(f"Ошибка: не удалось сохранить изображение {path_to_save}")
-                return False
-
-            print(f"Успешно! Обнаружено лиц: {len(final_detections)}. Результат сохранен в {path_to_save}")
-            return True
-
-        except Exception as e:
-            print(f"Ошибка в detect_and_draw: {str(e)}")
+        # Сохраняем результат
+        if not cv2.imwrite(path_to_save, result_img):
+            print(f"Ошибка: не удалось сохранить изображение {path_to_save}")
             return False
+
+        print(f"Успешно! Обнаружено лиц: {len(detections)}. Результат сохранен в {path_to_save}")
+        return True
+
+
 
 
 
